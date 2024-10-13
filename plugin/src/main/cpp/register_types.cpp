@@ -67,6 +67,7 @@
 #include "extensions/openxr_htc_facial_tracking_extension_wrapper.h"
 #include "extensions/openxr_htc_passthrough_extension_wrapper.h"
 #include "extensions/openxr_meta_spatial_entity_mesh_extension_wrapper.h"
+#include "extensions/openxr_meta_depth_extension_wrapper.h"
 
 #include "classes/openxr_fb_hand_tracking_mesh.h"
 #include "classes/openxr_fb_passthrough_geometry.h"
@@ -78,6 +79,7 @@
 #include "classes/openxr_fb_spatial_entity_query.h"
 #include "classes/openxr_fb_spatial_entity_user.h"
 #include "classes/openxr_meta_passthrough_color_lut.h"
+#include "classes/openxr_meta_depth.h"
 
 using namespace godot;
 
@@ -150,6 +152,9 @@ void initialize_plugin_module(ModuleInitializationLevel p_level) {
 			ClassDB::register_class<OpenXRHtcPassthroughExtensionWrapper>();
 			OpenXRHtcPassthroughExtensionWrapper::get_singleton()->register_extension_wrapper();
 
+			ClassDB::register_class<OpenXRMetaDepthExtensionWrapper>();
+			OpenXRMetaDepthExtensionWrapper::get_singleton()->register_extension_wrapper();
+
 		} break;
 
 		case MODULE_INITIALIZATION_LEVEL_SERVERS:
@@ -171,6 +176,7 @@ void initialize_plugin_module(ModuleInitializationLevel p_level) {
 			Engine::get_singleton()->register_singleton("OpenXRFbCompositionLayerSettingsExtensionWrapper", OpenXRFbCompositionLayerSettingsExtensionWrapper::get_singleton());
 			Engine::get_singleton()->register_singleton("OpenXRHtcFacialTrackingExtensionWrapper", OpenXRHtcFacialTrackingExtensionWrapper::get_singleton());
 			Engine::get_singleton()->register_singleton("OpenXRHtcPassthroughExtensionWrapper", OpenXRHtcPassthroughExtensionWrapper::get_singleton());
+			Engine::get_singleton()->register_singleton("OpenXRMetaDepthExtensionWrapper", OpenXRMetaDepthExtensionWrapper::get_singleton());
 
 			ClassDB::register_class<OpenXRFbRenderModel>();
 			ClassDB::register_class<OpenXRFbHandTrackingMesh>();
@@ -182,6 +188,7 @@ void initialize_plugin_module(ModuleInitializationLevel p_level) {
 			ClassDB::register_class<OpenXRFbSpatialEntityUser>();
 			ClassDB::register_class<OpenXRFbPassthroughGeometry>();
 			ClassDB::register_class<OpenXRMetaPassthroughColorLut>();
+			ClassDB::register_class<OpenXRMetaEnvironmentDepthProvider>();
 
 			OpenXRFbHandTrackingAimExtensionWrapper::get_singleton()->add_project_setting();
 		} break;
