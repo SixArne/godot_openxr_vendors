@@ -44,6 +44,9 @@ public:
 	Dictionary _get_requested_extensions() override;
 
 	void _on_instance_created(uint64_t instance) override;
+	void _on_session_created(uint64_t p_session) override;
+
+	void _on_session_destroyed() override;
 	void _on_instance_destroyed() override;
 
 	static OpenXRMetaDepthExtensionWrapper *get_singleton();

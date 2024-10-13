@@ -37,6 +37,12 @@
 
 namespace godot {
 
+    struct DepthMapSize
+    {
+        uint32_t width{};
+        uint32_t height{};
+    };
+
     class OpenXRMetaEnvironmentDepthProvider : public Node {
         GDCLASS(OpenXRMetaEnvironmentDepthProvider, Node);
 
@@ -45,14 +51,38 @@ namespace godot {
         ~OpenXRMetaEnvironmentDepthProvider();
 
         void enable_depth(bool value);
+        void enable_hand_removal(bool value);
+        DepthMapSize get_depth_map_size();
+
+        void _process(double delta) override;
 
     protected:
         static void _bind_methods();
 
     private:
-        bool _is_depth_enabled{false};
+        bool m_Is_depth_enabled{false};
+        bool m_Depth_map_was_accessed_this_frame{false};
 
-        void fetch_function_pointers(uint32_t instance);
+        void fetch_function_pointers(uint64_t instance);
+        void create_depth_provider(uint64_t session);
+        void on_session_destroyed();
+        void create_depth_swapchains();
+        void enumerate_depth_swapchain_images();
+
+        XrEnvironmentDepthProviderMETA m_environmentDepthProvider{};
+        XrEnvironmentDepthSwapchainMETA m_environmentDepthSwapchain{};
+
+        PFN_xrCreateEnvironmentDepthProviderMETA m_xrCreateEnvironmentDepthProviderMETA{nullptr};
+        PFN_xrDestroyEnvironmentDepthProviderMETA m_xrDestroyEnvironmentDepthProviderMETA{nullptr};
+        PFN_xrStartEnvironmentDepthProviderMETA m_xrStartEnvironmentDepthProviderMETA{nullptr};
+        PFN_xrStopEnvironmentDepthProviderMETA m_xrStopEnvironmentDepthProviderMETA{nullptr};
+        PFN_xrCreateEnvironmentDepthSwapchainMETA m_xrCreateEnvironmentDepthSwapchainMETA{nullptr};
+        PFN_xrDestroyEnvironmentDepthSwapchainMETA m_xrDestroyEnvironmentDepthSwapchainMETA{nullptr};
+        PFN_xrEnumerateEnvironmentDepthSwapchainImagesMETA m_xrEnumerateEnvironmentDepthSwapchainImagesMETA{nullptr};
+        PFN_xrGetEnvironmentDepthSwapchainStateMETA m_xrGetEnvironmentDepthSwapchainStateMETA{nullptr};
+        PFN_xrAcquireEnvironmentDepthImageMETA m_xrAcquireEnvironmentDepthImageMETA{nullptr};
+        PFN_xrSetEnvironmentDepthHandRemovalMETA m_xrSetEnvironmentDepthHandRemovalMETA{nullptr};
+
     };
 } // namespace godot
 

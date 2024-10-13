@@ -37,6 +37,9 @@
 
 using namespace godot;
 
+// Docs:
+// https://developers.meta.com/horizon/documentation/native/android/mobile-depth
+
 void OpenXRMetaEnvironmentDepthProvider::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("enable_depth", "value"), &OpenXRMetaEnvironmentDepthProvider::enable_depth);
 
@@ -46,82 +49,220 @@ OpenXRMetaEnvironmentDepthProvider::OpenXRMetaEnvironmentDepthProvider()
 {
     OpenXRMetaDepthExtensionWrapper* value = reinterpret_cast<OpenXRMetaDepthExtensionWrapper*>(Engine::get_singleton()->get_singleton("OpenXRMetaEnvironmentDepthWrapper"));
     value->connect("openxr_instance_created", callable_mp(this, &OpenXRMetaEnvironmentDepthProvider::fetch_function_pointers));
+    value->connect("openxr_session_created", callable_mp(this, &OpenXRMetaEnvironmentDepthProvider::create_depth_provider));
+    value->connect("openxr_session_destroyed", callable_mp(this, &OpenXRMetaEnvironmentDepthProvider::create_depth_provider));
 }
 
 OpenXRMetaEnvironmentDepthProvider::~OpenXRMetaEnvironmentDepthProvider()
 {
 }
 
-void fetch_function_pointers(uint32_t i)
+void OpenXRMetaEnvironmentDepthProvider::_process(double delta)
+{
+    m_Depth_map_was_accessed_this_frame = false;
+}
+
+void OpenXRMetaEnvironmentDepthProvider::on_session_destroyed()
+{
+    xrDestroyEnvironmentDepthProviderMETA(m_environmentDepthProvider);
+    xrDestroyEnvironmentDepthSwapchainMETA(m_environmentDepthSwapchain);
+}
+
+void OpenXRMetaEnvironmentDepthProvider::aquire_depth_map()
+{
+    if (! m_Depth_map_was_accessed_this_frame)
+    {
+        XrEnvironmentDepthImageAcquireInfoMETA aquireInfo{};
+        aquireInfo.type = XR_TYPE_ENVIRONMENT_DEPTH_IMAGE_ACQUIRE_INFO_META;
+        aquireInfo.next = nullptr;
+        aquireInfo.displayTime = (XrTime)0; //FIXME: Get the actual time
+        aquireInfo.space = (XrSpace)0; // FIXME: Get the actual space
+
+        XrEnvironmentDepthImageMETA imageInfo {};
+        imageInfo.type = XR_TYPE_ENVIRONMENT_DEPTH_IMAGE_META;
+
+        XrResult result = xrAcquireEnvironmentDepthImageMETA(
+            m_environmentDepthProvider,
+            aquireInfo,
+            imageInfo);
+
+        if (result != XrResult::XR_SUCCESS)
+        {
+            // TODO: Signal failure of removing hands
+        }
+
+        m_Depth_map_was_accessed_this_frame = true;
+    }
+}
+
+DepthMapSize OpenXRMetaEnvironmentDepthProvider::get_depth_map_size()
+{
+    XrEnvironmentDepthSwapchainStateMETA depthSwapchainState{};
+    depthSwapchainState.type = XR_TYPE_ENVIRONMENT_DEPTH_SWAPCHAIN_STATE_META;
+    depthSwapchainState.next = nullptr;
+    depthSwapchainState.width = 0;
+    depthSwapchainState.height = 0;
+
+    XrResult result = xrGetEnvironmentDepthSwapchainStateMETA(
+        m_environmentDepthSwapchain,
+        depthSwapchainState
+    );
+
+    if (result != XrResult::XR_SUCCESS)
+    {
+        // TODO: Signal failure of removing hands
+    }
+
+    DepthMapSize size{};
+    size.width = depthSwapchainState.width;
+    size.height = depthSwapchainState.height;
+
+    return size;
+}
+
+void OpenXRMetaEnvironmentDepthProvider::enumerate_depth_swapchain_images()
+{
+    // TODO: Look into iteration
+    // XrResult result = xrEnumerateEnvironmentDepthSwapchainImagesMETA(
+    //     m_environmentDepthSwapchain,
+    //     uint32_t imageCapacityInput,
+    //     uint32_t* imageCountOutput,
+    //     XrSwapchainImageBaseHeader* images);
+}
+
+void OpenXRMetaEnvironmentDepthProvider::enable_hand_removal(bool value)
+{
+    XrEnvironmentDepthHandRemovalSetInfoMETA handRemovalSetInfo{};
+    handRemovalSetInfo.type = XR_TYPE_ENVIRONMENT_DEPTH_HAND_REMOVAL_SET_INFO_META;
+    handRemovalSetInfo.next = nullptr;
+    handRemovalSetInfo.enabled = value;
+
+    XrResult result = xrSetEnvironmentDepthHandRemovalMETA(
+        m_environmentDepthProvider,
+        handRemovalSetInfo);
+
+    if (result != XrResult::XR_SUCCESS)
+    {
+        // TODO: Signal failure of removing hands
+    }
+}
+
+void OpenXRMetaEnvironmentDepthProvider::create_depth_provider(uint64_t session)
+{
+    XrEnvironmentDepthProviderCreateInfoMETA createInfo{};
+    createInfo.type = XrStructureType::XR_TYPE_ENVIRONMENT_DEPTH_PROVIDER_CREATE_INFO_META;
+    createInfo.next = nullptr;
+    createInfo.createFlags = 0;
+
+    XrResult result = xrCreateEnvironmentDepthProviderMETA(
+        (XrSession)session,
+        createInfo,
+        m_environmentDepthProvider);
+
+    if (result != XrResult::XR_SUCCESS)
+    {
+        // TODO: Signal failure of creating depth provider
+    }
+}
+
+void OpenXRMetaEnvironmentDepthProvider::create_depth_swapchains()
+{
+    XrEnvironmentDepthSwapchainCreateInfoMETA depthSwapchainCreateInfo {};
+    depthSwapchainCreateInfo.type = XrStructureType::XR_TYPE_ENVIRONMENT_DEPTH_SWAPCHAIN_CREATE_INFO_META;
+    depthSwapchainCreateInfo.next = nullptr;
+    depthSwapchainCreateInfo.createFlags = 0;
+
+    XrResult result = xrCreateEnvironmentDepthSwapchainMETA(
+        m_environmentDepthProvider,
+        depthSwapchainCreateInfo,
+        m_environmentDepthSwapchain);
+
+    if (result != XrResult::XR_SUCCESS)
+    {
+        // TODO: Signal failure of creating depth provider
+    }
+}
+
+void OpenXRMetaEnvironmentDepthProvider::fetch_function_pointers(uint64_t i)
 {
     godot::UtilityFunctions::print("Setting function pointers");
 
     XrInstance instance = (XrInstance)i;
 
-    PFN_xrCreateEnvironmentDepthProviderMETA xrCreateEnvironmentDepthProviderMETA = nullptr;
-    PFN_xrDestroyEnvironmentDepthProviderMETA xrDestroyEnvironmentDepthProviderMETA = nullptr;
-    PFN_xrStartEnvironmentDepthProviderMETA xrStartEnvironmentDepthProviderMETA = nullptr;
-    PFN_xrStopEnvironmentDepthProviderMETA xrStopEnvironmentDepthProviderMETA = nullptr;
-    PFN_xrCreateEnvironmentDepthSwapchainMETA xrCreateEnvironmentDepthSwapchainMETA = nullptr;
-    PFN_xrDestroyEnvironmentDepthSwapchainMETA xrDestroyEnvironmentDepthSwapchainMETA = nullptr;
-    PFN_xrEnumerateEnvironmentDepthSwapchainImagesMETA xrEnumerateEnvironmentDepthSwapchainImagesMETA = nullptr;
-    PFN_xrGetEnvironmentDepthSwapchainStateMETA xrGetEnvironmentDepthSwapchainStateMETA = nullptr;
-    PFN_xrAcquireEnvironmentDepthImageMETA xrAcquireEnvironmentDepthImageMETA = nullptr;
-    PFN_xrSetEnvironmentDepthHandRemovalMETA xrSetEnvironmentDepthHandRemovalMETA = nullptr;
+    xrGetInstanceProcAddr(
+        instance,
+        "xrCreateEnvironmentDepthProviderMETA",
+        reinterpret_cast<PFN_xrVoidFunction*>(&m_xrCreateEnvironmentDepthProviderMETA));
 
     xrGetInstanceProcAddr(
-    instance,
-    "xrCreateEnvironmentDepthProviderMETA",
-    reinterpret_cast<PFN_xrVoidFunction*>(&xrCreateEnvironmentDepthProviderMETA));
+        instance,
+        "xrDestroyEnvironmentDepthProviderMETA",
+        reinterpret_cast<PFN_xrVoidFunction*>(&m_xrDestroyEnvironmentDepthProviderMETA));
+    
     xrGetInstanceProcAddr(
-    instance,
-    "xrDestroyEnvironmentDepthProviderMETA",
-    reinterpret_cast<PFN_xrVoidFunction*>(&xrDestroyEnvironmentDepthProviderMETA));
+        instance,
+        "xrStartEnvironmentDepthProviderMETA",
+        reinterpret_cast<PFN_xrVoidFunction*>(&m_xrStartEnvironmentDepthProviderMETA));
+    
     xrGetInstanceProcAddr(
-    instance,
-    "xrStartEnvironmentDepthProviderMETA",
-    reinterpret_cast<PFN_xrVoidFunction*>(&xrStartEnvironmentDepthProviderMETA));
+        instance,
+        "xrStopEnvironmentDepthProviderMETA",
+        reinterpret_cast<PFN_xrVoidFunction*>(&m_xrStopEnvironmentDepthProviderMETA));
+    
     xrGetInstanceProcAddr(
-    instance,
-    "xrStopEnvironmentDepthProviderMETA",
-    reinterpret_cast<PFN_xrVoidFunction*>(&xrStopEnvironmentDepthProviderMETA));
+        instance,
+        "xrCreateEnvironmentDepthSwapchainMETA",
+        reinterpret_cast<PFN_xrVoidFunction*>(&m_xrCreateEnvironmentDepthSwapchainMETA));
+    
     xrGetInstanceProcAddr(
-    instance,
-    "xrCreateEnvironmentDepthSwapchainMETA",
-    reinterpret_cast<PFN_xrVoidFunction*>(&xrCreateEnvironmentDepthSwapchainMETA));
+        instance,
+        "xrDestroyEnvironmentDepthSwapchainMETA",
+        reinterpret_cast<PFN_xrVoidFunction*>(&m_xrDestroyEnvironmentDepthSwapchainMETA));
+    
     xrGetInstanceProcAddr(
-    instance,
-    "xrDestroyEnvironmentDepthSwapchainMETA",
-    reinterpret_cast<PFN_xrVoidFunction*>(&xrDestroyEnvironmentDepthSwapchainMETA));
+        instance,
+        "xrEnumerateEnvironmentDepthSwapchainImagesMETA",
+        reinterpret_cast<PFN_xrVoidFunction*>(&m_xrEnumerateEnvironmentDepthSwapchainImagesMETA));
+    
     xrGetInstanceProcAddr(
-    instance,
-    "xrEnumerateEnvironmentDepthSwapchainImagesMETA",
-    reinterpret_cast<PFN_xrVoidFunction*>(&xrEnumerateEnvironmentDepthSwapchainImagesMETA));
+        instance,
+        "xrGetEnvironmentDepthSwapchainStateMETA",
+        reinterpret_cast<PFN_xrVoidFunction*>(&m_xrGetEnvironmentDepthSwapchainStateMETA));
+    
     xrGetInstanceProcAddr(
-    instance,
-    "xrGetEnvironmentDepthSwapchainStateMETA",
-    reinterpret_cast<PFN_xrVoidFunction*>(&xrGetEnvironmentDepthSwapchainStateMETA));
+        instance,
+        "xrAcquireEnvironmentDepthImageMETA",
+        reinterpret_cast<PFN_xrVoidFunction*>(&m_xrAcquireEnvironmentDepthImageMETA));
+    
     xrGetInstanceProcAddr(
-    instance,
-    "xrAcquireEnvironmentDepthImageMETA",
-    reinterpret_cast<PFN_xrVoidFunction*>(&xrAcquireEnvironmentDepthImageMETA));
-    xrGetInstanceProcAddr(
-    instance,
-    "xrSetEnvironmentDepthHandRemovalMETA",
-    reinterpret_cast<PFN_xrVoidFunction*>(&xrSetEnvironmentDepthHandRemovalMETA));
+        instance,
+        "xrSetEnvironmentDepthHandRemovalMETA",
+        reinterpret_cast<PFN_xrVoidFunction*>(&m_xrSetEnvironmentDepthHandRemovalMETA));
 }
 
 void OpenXRMetaEnvironmentDepthProvider::enable_depth(bool value)
 {
-    _is_depth_enabled = value;
-
-    if (_is_depth_enabled)
+    m_Is_depth_enabled = value;
+    XrResult result{};
+     
+    if (m_Is_depth_enabled)
     {
-        godot::UtilityFunctions::print("Depth occulusion enabled");
+        result = xrStartEnvironmentDepthProviderMETA(
+            m_environmentDepthProvider);
+
+        // TODO: call signal
     }
     else
     {
-        godot::UtilityFunctions::print("Depth occulusion disabled");
+        result = xrStopEnvironmentDepthProviderMETA(
+            m_environmentDepthProvider);
+
+        // TODO: call signal
+    }
+
+    if (result != XrResult::XR_SUCCESS)
+    {
+        // TODO: Signal failure of creating depth provider
     }
 }
 

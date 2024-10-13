@@ -77,3 +77,14 @@ void OpenXRMetaDepthExtensionWrapper::_on_instance_created(uint64_t instance) {
 void OpenXRMetaDepthExtensionWrapper::_on_instance_destroyed() {
 	emit_signal("openxr_instance_destroyed");    
 }
+
+void OpenXRMetaDepthExtensionWrapper::_on_session_created(uint64_t instance) {
+	emit_signal("openxr_session_created", instance);    
+}
+
+void OpenXRMetaDepthExtensionWrapper::_on_session_destroyed() {
+	emit_signal("openxr_session_destroyed");    
+}
+
+
+
