@@ -42,15 +42,19 @@ using namespace godot;
 
 void OpenXRMetaEnvironmentDepthProvider::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("enable_depth", "value"), &OpenXRMetaEnvironmentDepthProvider::enable_depth);
+	ClassDB::bind_method(D_METHOD("enable_hands", "value"), &OpenXRMetaEnvironmentDepthProvider::enable_hand_removal);
 
+	ADD_SIGNAL(MethodInfo("_on_depth_provider_started", PropertyInfo(Variant::Type::NIL, "")));
+	ADD_SIGNAL(MethodInfo("_on_depth_provider_stopped", PropertyInfo(Variant::Type::NIL, "")));
+	ADD_SIGNAL(MethodInfo("_on_depth_provider_error", PropertyInfo(Variant::Type::STRING, "error_message")));
 }
 
 OpenXRMetaEnvironmentDepthProvider::OpenXRMetaEnvironmentDepthProvider()
 {
     OpenXRMetaDepthExtensionWrapper* value = reinterpret_cast<OpenXRMetaDepthExtensionWrapper*>(Engine::get_singleton()->get_singleton("OpenXRMetaEnvironmentDepthWrapper"));
     value->connect("openxr_instance_created", callable_mp(this, &OpenXRMetaEnvironmentDepthProvider::fetch_function_pointers));
-    value->connect("openxr_session_created", callable_mp(this, &OpenXRMetaEnvironmentDepthProvider::create_depth_provider));
-    value->connect("openxr_session_destroyed", callable_mp(this, &OpenXRMetaEnvironmentDepthProvider::create_depth_provider));
+    value->connect("openxr_session_created", callable_mp(this, &OpenXRMetaEnvironmentDepthProvider::on_session_created));
+    value->connect("openxr_session_destroyed", callable_mp(this, &OpenXRMetaEnvironmentDepthProvider::on_session_destroyed));
 }
 
 OpenXRMetaEnvironmentDepthProvider::~OpenXRMetaEnvironmentDepthProvider()
@@ -60,12 +64,35 @@ OpenXRMetaEnvironmentDepthProvider::~OpenXRMetaEnvironmentDepthProvider()
 void OpenXRMetaEnvironmentDepthProvider::_process(double delta)
 {
     m_Depth_map_was_accessed_this_frame = false;
+
+    if (m_Is_depth_enabled)
+    {
+        // TODO: Enumerate here? we need to get the XrSwapchainImageBaseHeader though.....
+        enumerate_depth_swapchain_images();
+    }
+}
+
+void OpenXRMetaEnvironmentDepthProvider::enumerate_depth_swapchain_images()
+{
+    // TODO: Look into iteration, probably in process while the depth provider is working?
+
+    // XrResult result = xrEnumerateEnvironmentDepthSwapchainImagesMETA(
+    //     m_environmentDepthSwapchain,
+    //     uint32_t imageCapacityInput,
+    //     uint32_t* imageCountOutput,
+    //     XrSwapchainImageBaseHeader* images); //STUB - This might need to be tightly linked to the actual vulkan rendering, which at first glance seems out of reach
+    //                                          // for GDExtension?
 }
 
 void OpenXRMetaEnvironmentDepthProvider::on_session_destroyed()
 {
     xrDestroyEnvironmentDepthProviderMETA(m_environmentDepthProvider);
     xrDestroyEnvironmentDepthSwapchainMETA(m_environmentDepthSwapchain);
+}
+
+void OpenXRMetaEnvironmentDepthProvider::on_session_created(uint64_t session)
+{
+    create_depth_provider(session);
 }
 
 void OpenXRMetaEnvironmentDepthProvider::aquire_depth_map()
@@ -88,7 +115,7 @@ void OpenXRMetaEnvironmentDepthProvider::aquire_depth_map()
 
         if (result != XrResult::XR_SUCCESS)
         {
-            // TODO: Signal failure of removing hands
+            godot::UtilityFunctions::printerr("Failed to aquire depth map");
         }
 
         m_Depth_map_was_accessed_this_frame = true;
@@ -110,7 +137,7 @@ DepthMapSize OpenXRMetaEnvironmentDepthProvider::get_depth_map_size()
 
     if (result != XrResult::XR_SUCCESS)
     {
-        // TODO: Signal failure of removing hands
+        godot::UtilityFunctions::printerr("Failed to get depth map size");
     }
 
     DepthMapSize size{};
@@ -118,16 +145,6 @@ DepthMapSize OpenXRMetaEnvironmentDepthProvider::get_depth_map_size()
     size.height = depthSwapchainState.height;
 
     return size;
-}
-
-void OpenXRMetaEnvironmentDepthProvider::enumerate_depth_swapchain_images()
-{
-    // TODO: Look into iteration
-    // XrResult result = xrEnumerateEnvironmentDepthSwapchainImagesMETA(
-    //     m_environmentDepthSwapchain,
-    //     uint32_t imageCapacityInput,
-    //     uint32_t* imageCountOutput,
-    //     XrSwapchainImageBaseHeader* images);
 }
 
 void OpenXRMetaEnvironmentDepthProvider::enable_hand_removal(bool value)
@@ -143,7 +160,14 @@ void OpenXRMetaEnvironmentDepthProvider::enable_hand_removal(bool value)
 
     if (result != XrResult::XR_SUCCESS)
     {
-        // TODO: Signal failure of removing hands
+        if (value)
+        {
+            godot::UtilityFunctions::printerr("Failed to enable hand removal");
+        }
+        else
+        {
+            godot::UtilityFunctions::printerr("Failed to disable hand removal");
+        }
     }
 }
 
@@ -161,7 +185,11 @@ void OpenXRMetaEnvironmentDepthProvider::create_depth_provider(uint64_t session)
 
     if (result != XrResult::XR_SUCCESS)
     {
-        // TODO: Signal failure of creating depth provider
+        godot::UtilityFunctions::printerr("Failed to create depth provider");
+    }
+    else
+    {
+        create_depth_swapchains();
     }
 }
 
@@ -179,7 +207,7 @@ void OpenXRMetaEnvironmentDepthProvider::create_depth_swapchains()
 
     if (result != XrResult::XR_SUCCESS)
     {
-        // TODO: Signal failure of creating depth provider
+        godot::UtilityFunctions::printerr("Failed to create depth swapchains");
     }
 }
 
@@ -250,19 +278,26 @@ void OpenXRMetaEnvironmentDepthProvider::enable_depth(bool value)
         result = xrStartEnvironmentDepthProviderMETA(
             m_environmentDepthProvider);
 
-        // TODO: call signal
+        emit_signal("_on_depth_provider_started");
     }
     else
     {
         result = xrStopEnvironmentDepthProviderMETA(
             m_environmentDepthProvider);
 
-        // TODO: call signal
+        emit_signal("_on_depth_provider_stopped");
     }
 
     if (result != XrResult::XR_SUCCESS)
     {
-        // TODO: Signal failure of creating depth provider
+        if (m_Is_depth_enabled)
+        {
+            godot::UtilityFunctions::printerr("Failed to start the Depth Provider");
+        }
+        else
+        {
+            godot::UtilityFunctions::printerr("Failed to stop the Depth Provider");
+        }
     }
 }
 
