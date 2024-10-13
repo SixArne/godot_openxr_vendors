@@ -63,13 +63,15 @@ namespace godot {
         bool m_Is_depth_enabled{false};
         bool m_Depth_map_was_accessed_this_frame{false};
 
-        void fetch_function_pointers(uint64_t instance);
-        void create_depth_provider(uint64_t session);
+        void fetch_function_pointers();
+        void create_depth_provider();
         void on_session_destroyed();
         void on_session_created(uint64_t session);
         void create_depth_swapchains();
         void enumerate_depth_swapchain_images();
         void aquire_depth_map();
+
+        OpenXRMetaDepthExtensionWrapper* m_DepthExtensionWrapper{};
 
         XrEnvironmentDepthProviderMETA m_environmentDepthProvider{};
         XrEnvironmentDepthSwapchainMETA m_environmentDepthSwapchain{};

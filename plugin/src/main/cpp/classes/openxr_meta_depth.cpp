@@ -32,6 +32,7 @@
 #include <godot_cpp/classes/engine.hpp>
 #include <godot_cpp/variant/utility_functions.hpp>
 #include <godot_cpp/variant/callable_method_pointer.hpp>
+#include <godot_cpp/classes/open_xrapi_extension.hpp>
 
 #include "openxr/openxr.h"
 
@@ -51,10 +52,10 @@ void OpenXRMetaEnvironmentDepthProvider::_bind_methods() {
 
 OpenXRMetaEnvironmentDepthProvider::OpenXRMetaEnvironmentDepthProvider()
 {
-    OpenXRMetaDepthExtensionWrapper* value = reinterpret_cast<OpenXRMetaDepthExtensionWrapper*>(Engine::get_singleton()->get_singleton("OpenXRMetaEnvironmentDepthWrapper"));
-    value->connect("openxr_instance_created", callable_mp(this, &OpenXRMetaEnvironmentDepthProvider::fetch_function_pointers));
-    value->connect("openxr_session_created", callable_mp(this, &OpenXRMetaEnvironmentDepthProvider::on_session_created));
-    value->connect("openxr_session_destroyed", callable_mp(this, &OpenXRMetaEnvironmentDepthProvider::on_session_destroyed));
+    m_DepthExtensionWrapper = reinterpret_cast<OpenXRMetaDepthExtensionWrapper*>(Engine::get_singleton()->get_singleton("OpenXRMetaEnvironmentDepthWrapper"));
+    m_DepthExtensionWrapper->connect("openxr_instance_created", callable_mp(this, &OpenXRMetaEnvironmentDepthProvider::fetch_function_pointers));
+    m_DepthExtensionWrapper->connect("openxr_session_created", callable_mp(this, &OpenXRMetaEnvironmentDepthProvider::on_session_created));
+    m_DepthExtensionWrapper->connect("openxr_session_destroyed", callable_mp(this, &OpenXRMetaEnvironmentDepthProvider::on_session_destroyed));
 }
 
 OpenXRMetaEnvironmentDepthProvider::~OpenXRMetaEnvironmentDepthProvider()
@@ -102,8 +103,8 @@ void OpenXRMetaEnvironmentDepthProvider::aquire_depth_map()
         XrEnvironmentDepthImageAcquireInfoMETA aquireInfo{};
         aquireInfo.type = XR_TYPE_ENVIRONMENT_DEPTH_IMAGE_ACQUIRE_INFO_META;
         aquireInfo.next = nullptr;
-        aquireInfo.displayTime = (XrTime)0; //FIXME: Get the actual time
-        aquireInfo.space = (XrSpace)0; // FIXME: Get the actual space
+        aquireInfo.displayTime = (XrTime)m_DepthExtensionWrapper->get_openxr_api()->get_predicted_display_time();
+        aquireInfo.space = (XrSpace)m_DepthExtensionWrapper->get_openxr_api()->get_play_space();
 
         XrEnvironmentDepthImageMETA imageInfo {};
         imageInfo.type = XR_TYPE_ENVIRONMENT_DEPTH_IMAGE_META;
@@ -171,7 +172,7 @@ void OpenXRMetaEnvironmentDepthProvider::enable_hand_removal(bool value)
     }
 }
 
-void OpenXRMetaEnvironmentDepthProvider::create_depth_provider(uint64_t session)
+void OpenXRMetaEnvironmentDepthProvider::create_depth_provider()
 {
     XrEnvironmentDepthProviderCreateInfoMETA createInfo{};
     createInfo.type = XrStructureType::XR_TYPE_ENVIRONMENT_DEPTH_PROVIDER_CREATE_INFO_META;
@@ -179,7 +180,7 @@ void OpenXRMetaEnvironmentDepthProvider::create_depth_provider(uint64_t session)
     createInfo.createFlags = 0;
 
     XrResult result = xrCreateEnvironmentDepthProviderMETA(
-        (XrSession)session,
+        (XrSession)m_DepthExtensionWrapper->get_openxr_api()->get_session(),
         createInfo,
         m_environmentDepthProvider);
 
@@ -211,11 +212,11 @@ void OpenXRMetaEnvironmentDepthProvider::create_depth_swapchains()
     }
 }
 
-void OpenXRMetaEnvironmentDepthProvider::fetch_function_pointers(uint64_t i)
+void OpenXRMetaEnvironmentDepthProvider::fetch_function_pointers()
 {
     godot::UtilityFunctions::print("Setting function pointers");
 
-    XrInstance instance = (XrInstance)i;
+    XrInstance instance = (XrInstance)m_DepthExtensionWrapper->get_openxr_api()->get_instance();
 
     xrGetInstanceProcAddr(
         instance,
